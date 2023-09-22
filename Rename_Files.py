@@ -5,17 +5,16 @@ import pandas as pd
 
 Script_path = Path(__file__).resolve()
 ROOT = Script_path.parents[0]
-print(ROOT)
+
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-r", "--root_path", type=str, help="Directory of the root")
     parser.add_argument("-f", "--folders_path", type=str, help="Directory of the folders")
     args = parser.parse_args()
 
-    folder_path: object = args.folders_path
+    folder_path = args.folders_path
     folders = os.listdir(folder_path)
     # print(folders)
 
@@ -54,3 +53,5 @@ if __name__ == "__main__":
 
     folder_df.to_csv(folder_path + "Folder_Reference.csv")
     video_df.to_csv(folder_path + "Video_Reference.csv")
+
+    print("Files have been renamed in order and changes were saved.")
