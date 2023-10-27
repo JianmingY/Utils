@@ -56,6 +56,8 @@ class Annotator(QMainWindow):
         self.selected_class = 1
         self.label_colors = {}
         self.bounding_boxes = []
+        self.image_width = 100
+        self.image_height = 100
         self.total_images = 0
 
         # Create a shortcut for copy and paste action
@@ -116,7 +118,7 @@ class Annotator(QMainWindow):
 
 
         # Set up the crosshair cursor
-        cursor_size = 32
+        cursor_size = 16
         crosshair_pixmap = QPixmap(cursor_size, cursor_size)
         crosshair_pixmap.fill(Qt.transparent)
         painter = QPainter(crosshair_pixmap)
@@ -144,15 +146,14 @@ class Annotator(QMainWindow):
             self.drawing_start = True
             self.start_pos = self.end_pos = self.image_view.mapToScene(event.pos())
 
-
     def mouseMoveEventHandler(self, event):
         if self.drawing_start and self.image_view.cursor().shape() == 24:
             # Update the end position as the mouse moves
             new_end_pos = self.image_view.mapToScene(event.pos())
 
             # Ensure the new_end_pos stays within the image boundaries
-            new_end_pos.setX(max(self.image_rect.left()+1, min(self.image_rect.right()-1, new_end_pos.x())))
-            new_end_pos.setY(max(self.image_rect.top()+1, min(self.image_rect.bottom()-1, new_end_pos.y())))
+            new_end_pos.setX(max(self.image_rect.left() + 1, min(self.image_rect.right() - 1, new_end_pos.x())))
+            new_end_pos.setY(max(self.image_rect.top() + 1, min(self.image_rect.bottom() - 1, new_end_pos.y())))
 
             self.end_pos = new_end_pos
             self.updateTemporaryBoundingBox()
@@ -291,9 +292,12 @@ class Annotator(QMainWindow):
             else:
                 self.scene.clear()
                 self.scene.addPixmap(pixmap)
-                self.image_view.setScene(self.scene)
+
+
 
             self.image_view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+            self.image_width = self.image_view.sceneRect().width()
+            self.image_height = self.image_view.sceneRect().height()
             self.image_view.setScene(self.scene)
             self.image_rect = self.image_view.sceneRect()
 
@@ -324,24 +328,23 @@ class Annotator(QMainWindow):
             self.update()  # Trigger the paintEvent to draw bounding boxes
 
     def paintEvent(self, event):
-        super().paintEvent(event)
+        # super().paintEvent(event)
 
         for box in self.bounding_boxes:
             color = QColor(self.getColorForLabel(box["label"]))
-            self.image_view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
-            self.image_view.setScene(self.scene)
 
-            image_width = self.image_view.sceneRect().width()
-            image_height = self.image_view.sceneRect().height()
-            box_width = box["width"] * image_width
-            box_height = box["height"] * image_height
-            top_left_x = (box["center_x"] * image_width - box_width / 2)
-            top_left_y = (box["center_y"] * image_height - box_height / 2)
+
+            box_width = box["width"] * self.image_width
+            box_height = box["height"] * self.image_height
+            top_left_x = (box["center_x"] * self.image_width - box_width / 2)
+            top_left_y = (box["center_y"] * self.image_height - box_height / 2)
+
 
             # Draw bounding box
             rect_item = QGraphicsRectItem(top_left_x, top_left_y, box_width, box_height)
             rect_item.setPen(QPen(color, 2))
             self.scene.addItem(rect_item)
+
 
             # Draw class label on the bounding box
             font_size = 12
@@ -351,6 +354,10 @@ class Annotator(QMainWindow):
             text_item.setBrush(color)
             text_item.setFont(QFont("Arial", font_size))
             self.scene.addItem(text_item)
+
+        self.image_view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+        self.image_view.setScene(self.scene)
+
 
 
 
