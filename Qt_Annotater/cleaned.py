@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (
     QColorDialog,
 )
 from PyQt5.QtGui import QPixmap, QPen, QColor, QFont, QCursor, QKeySequence, QPainter
-from PyQt5.QtCore import Qt, QRectF
+from PyQt5.QtCore import Qt, QRectF, QPointF
 import random
 
 
@@ -41,9 +41,9 @@ class Annotator(QMainWindow):
         self.image_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.image_view.setRenderHint(QPainter.Antialiasing, True)
         self.image_view.setRenderHint(QPainter.SmoothPixmapTransform, True)
-        self.temp_rect_item = QGraphicsRectItem()
-        self.temp_rect_item.setPen(QPen(QColor("cyan"), 2, Qt.SolidLine))
-        self.scene.addItem(self.temp_rect_item)  # Add the temporary rectangle item to the scene initially
+        self.temp_rect_item = None
+        self.image_rect = None
+
 
 
         self.current_index = 0
@@ -60,6 +60,7 @@ class Annotator(QMainWindow):
         self.copy_and_paste_shortcut = QShortcut(QKeySequence("V"), self)
         self.copy_and_paste_shortcut.activated.connect(self.copyAndPasteBoundingBoxes)
 
+
         # Initialize UI elements
         self.initUI()
 
@@ -72,7 +73,8 @@ class Annotator(QMainWindow):
         self.slider = QSlider(Qt.Horizontal, self)
 
         self.image_view.mousePressEvent = self.mousePressEventHandler
-        # self.image_view.mouseMoveEvent = self.mouseMoveEventHandler
+        self.image_view.mouseMoveEvent = self.mouseMoveEventHandler
+        self.image_view.mouseReleaseEvent = self.mouseReleaseEventHandler
 
         # Status label setup
         self.status_label = QLabel(self)
@@ -115,57 +117,85 @@ class Annotator(QMainWindow):
         painter.drawLine(cursor_size // 2, 0, cursor_size // 2, cursor_size)
         painter.end()
 
-        crosshair_cursor = QCursor(crosshair_pixmap, cursor_size // 2, cursor_size // 2)
-        self.image_view.setCursor(crosshair_cursor)
+        self.crosshair_cursor = QCursor(crosshair_pixmap, cursor_size // 2, cursor_size // 2)
+        self.image_view.setCursor(self.crosshair_cursor)
 
     def mousePressEventHandler(self, event):
-        if event.button() == Qt.LeftButton:
-            if not self.drawing_start:
-                # Start drawing the bounding box
-                self.start_pos = self.image_view.mapToScene(event.pos())
-                self.end_pos = self.start_pos
-                self.drawing_start = True
-            else:
-                # End drawing the bounding box
-                self.end_pos = self.image_view.mapToScene(event.pos())
-                self.drawing_start = False
+        if event.button() == Qt.LeftButton and self.image_view.cursor().shape() == 24:
+            # Start drawing the bounding box
+            self.temp_rect_item = QGraphicsRectItem()
+            self.temp_rect_item.setPen(QPen(QColor("cyan"), 2, Qt.SolidLine))
+            self.scene.addItem(self.temp_rect_item)
+            self.drawing_start = True
+            self.start_pos = self.end_pos = self.image_view.mapToScene(event.pos())
 
-                # Calculate bounding box coordinates (in relative values)
-                top_left_x = min(self.start_pos.x(), self.end_pos.x())
-                top_left_y = min(self.start_pos.y(), self.end_pos.y())
-                box_width = abs(self.end_pos.x() - self.start_pos.x())
-                box_height = abs(self.end_pos.y() - self.start_pos.y())
-
-                # Save the bounding box coordinates or do something with them
-                # ...
-
-                # Update the temporary rectangle item's position and size
-                self.temp_rect_item.setRect(top_left_x, top_left_y, box_width, box_height)
 
     def mouseMoveEventHandler(self, event):
-        if self.drawing_start:
+        if self.drawing_start and self.image_view.cursor().shape() == 24:
             # Update the end position as the mouse moves
-            self.end_pos = self.image_view.mapToScene(event.pos())
+            new_end_pos = self.image_view.mapToScene(event.pos())
 
-            # Calculate bounding box coordinates (in relative values)
-            top_left_x = min(self.start_pos.x(), self.end_pos.x())
-            top_left_y = min(self.start_pos.y(), self.end_pos.y())
-            box_width = abs(self.end_pos.x() - self.start_pos.x())
-            box_height = abs(self.end_pos.y() - self.start_pos.y())
+            # Ensure the new_end_pos stays within the image boundaries
 
-            # Update the temporary rectangle item's position and size
-            self.temp_rect_item.setRect(top_left_x, top_left_y, box_width, box_height)
+            new_end_pos.setX(max(self.image_rect.left(), min(self.image_rect.right(), new_end_pos.x())))
+            new_end_pos.setY(max(self.image_rect.top(), min(self.image_rect.bottom(), new_end_pos.y())))
 
-            # Redraw the scene to update the temporary rectangle item
-            self.update()
+            self.end_pos = new_end_pos
+            self.updateTemporaryBoundingBox()
+
+    def mouseReleaseEventHandler(self, event):
+        pass
+        # if self.drawing_start and event.button() == Qt.LeftButton:
+        #     print(self.end_pos)
+        #     self.temp_rect_item = None
+        #     # End drawing the bounding box
+        #     self.drawing_start = False
+        #
+        #     # Calculate bounding box coordinates (in relative values)
+        #     top_left_x = min(self.start_pos.x(), self.end_pos.x())
+        #     top_left_y = min(self.start_pos.y(), self.end_pos.y())
+        #     box_width = abs(self.end_pos.x() - self.start_pos.x())
+        #     box_height = abs(self.end_pos.y() - self.start_pos.y())
+        #
+        #
+        #
+        #     # Save the bounding box coordinates to the current label file
+        #     label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+        #     with open(label_path, "a") as label_file:
+        #         class_id = self.label_classes.index(self.selected_class)
+        #         center_x = (top_left_x + box_width / 2) / self.image_view.sceneRect().width()
+        #         center_y = (top_left_y + box_height / 2) / self.image_view.sceneRect().height()
+        #         width = box_width / self.image_view.sceneRect().width()
+        #         height = box_height / self.image_view.sceneRect().height()
+        #         label_file.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+        #
+        #     # Reload the current image and its bounding boxes
+        #     self.showImage(self.current_index)
 
     def updateTemporaryBoundingBox(self):
-        if self.drawing_start and self.start_pos and self.end_pos:
+        if self.drawing_start and self.start_pos and self.end_pos and self.image_view.cursor().shape() == 24:
             # Calculate bounding box coordinates in pixel values
+            # if self.end_pos.x() >= self.image_view.sceneRect().width() / 2:
+            #     top_left_x = self.start_pos.x()
+            #     box_width = abs(self.image_view.sceneRect().width() / 2 - self.start_pos.x())
+            # elif self.end_pos.x() <= -self.image_view.sceneRect().width() / 2:
+            #     top_left_x = -self.image_view.sceneRect().width() / 2
+            #     box_width = abs(self.image_view.sceneRect().width() / 2 - self.start_pos.x())
+            # else:
             top_left_x = min(self.start_pos.x(), self.end_pos.x())
-            top_left_y = min(self.start_pos.y(), self.end_pos.y())
             box_width = abs(self.end_pos.x() - self.start_pos.x())
+
+
+            # if self.end_pos.y() >= self.image_view.sceneRect().height() / 2:
+            #     top_left_y = (self.start_pos.y())
+            #     box_height = abs(self.image_view.sceneRect().height() / 2 - self.start_pos.y())
+            # elif self.end_pos.y() <= -self.image_view.sceneRect().height() / 2:
+            #     top_left_y = -self.image_view.sceneRect().height() / 2
+            #     box_height = abs(self.image_view.sceneRect().height() / 2 - self.start_pos.y())
+            # else:
+            top_left_y = min(self.start_pos.y(), self.end_pos.y())
             box_height = abs(self.end_pos.y() - self.start_pos.y())
+
 
             # Update the temporary rectangle item's position and size
             self.temp_rect_item.setRect(top_left_x, top_left_y, box_width, box_height)
@@ -262,6 +292,7 @@ class Annotator(QMainWindow):
 
             self.image_view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
             self.image_view.setScene(self.scene)
+            self.image_rect = self.image_view.sceneRect()
 
             # Load and parse label file
             self.bounding_boxes = []  # Reset bounding boxes for the current image
@@ -294,6 +325,8 @@ class Annotator(QMainWindow):
 
         for box in self.bounding_boxes:
             color = QColor(self.getColorForLabel(box["label"]))
+            self.image_view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+            self.image_view.setScene(self.scene)
 
             image_width = self.image_view.sceneRect().width()
             image_height = self.image_view.sceneRect().height()
@@ -316,9 +349,9 @@ class Annotator(QMainWindow):
             text_item.setFont(QFont("Arial", font_size))
             self.scene.addItem(text_item)
 
-        self.image_view.setScene(self.scene)
 
-        self.updateTemporaryBoundingBox()
+
+
 
     def getColorForLabel(self, label):
         # Check if the label has a specific color assigned in the dictionary
