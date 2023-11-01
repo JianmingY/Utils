@@ -303,11 +303,36 @@ class Annotator(QMainWindow):
             self.selected_class = int(key - Qt.Key_0) - 1
 
     def mousePressEventHandler(self, event):
-        if event.button() == Qt.LeftButton and self.image_view.cursor().shape() == 24 and self.adjusting_start:
+        if (self.translate_start or self.adjusting_start) and event.button() == Qt.RightButton:
+            self.translate_start = False
+
+            self.temp_rect_item = QGraphicsRectItem()
+            self.temp_rect_item.setPen(QPen(QColor("yellow"), 2, Qt.SolidLine))
+            self.scene.addItem(self.temp_rect_item)
+
+            print("restore")
+            self.adjusting_start = False
+            self.selected_class = 0
+            self.scene.clear()
+            self.bounding_boxes.append(self.deleted_box)
+
+            label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+            with open(label_path, "w") as label_file:
+                for box in self.bounding_boxes:
+                    class_id = self.label_classes.index(box["label"])
+                    center_x = box["center_x"]
+                    center_y = box["center_y"]
+                    width = box["width"]
+                    height = box["height"]
+                    label_file.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+            self.showImage(self.current_index)
+        elif event.button() == Qt.LeftButton and self.image_view.cursor().shape() == 24 and self.adjusting_start:
             clicked_point = self.image_view.mapToScene(event.pos())
             self.temp_rect_item = QGraphicsRectItem()
             self.temp_rect_item.setPen(QPen(QColor("yellow"), 2, Qt.SolidLine))
             self.scene.addItem(self.temp_rect_item)
+
+
 
             # box_rect = self.calculateAbsoluteBoundingBox(box)
             if self.squares[0].contains(clicked_point):
@@ -337,7 +362,6 @@ class Annotator(QMainWindow):
                 self.start_pos = QPointF(self.bottom_right_x, self.bottom_right_y)
                 self.end_pos = QPointF(self.top_left_x, self.top_left_y)
 
-
             elif self.squares[3].contains(clicked_point):
                 print("left slected")
                 self.translate_start = True
@@ -358,10 +382,12 @@ class Annotator(QMainWindow):
                 self.start_pos = QPointF(self.top_left_x, self.top_left_y)
                 self.end_pos = QPointF(self.bottom_right_x, self.bottom_right_y)
             else:
+                print("restore")
                 self.adjusting_start = False
                 self.selected_class = 0
                 self.scene.clear()
                 self.bounding_boxes.append(self.deleted_box)
+
                 label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
                 with open(label_path, "w") as label_file:
                     for box in self.bounding_boxes:
@@ -435,7 +461,7 @@ class Annotator(QMainWindow):
         return QRectF(self.top_left_x, self.top_left_y, self.bottom_right_x - self.top_left_x, self.bottom_right_y - self.top_left_y)
 
     def mouseMoveEventHandler(self, event):
-        if self.adjusting_start and not self.translate_start and not event.button() == Qt.RightButton  :
+        if self.adjusting_start and not self.translate_start and not self.dragging_start:
             new_end_pos = self.image_view.mapToScene(event.pos())
 
             # Ensure the new_end_pos stays within the image boundaries
@@ -467,7 +493,7 @@ class Annotator(QMainWindow):
             self.end_pos = new_end_pos
             self.updateTemporaryBoundingBox()
 
-        if self.dragging_start and self.image_view.cursor().shape() == 24:
+        elif self.dragging_start and self.image_view.cursor().shape() == 24:
             end_pos = self.image_view.mapToScene(event.pos())
 
             # Ensure the new_end_pos stays within the image boundaries
@@ -596,8 +622,6 @@ class Annotator(QMainWindow):
                 self.showImage(self.current_index)
 
 
-
-
         elif self.dragging_start and event.button() == Qt.RightButton:
             # End dragging the bounding box
             self.dragging_start = False
@@ -628,14 +652,26 @@ class Annotator(QMainWindow):
 
 
     def updateTemporaryBoundingBox(self):
-        if (self.drawing_start or (self.adjusting_start and not self.translate_start)) and self.start_pos and self.end_pos and self.image_view.cursor().shape() == 24:
+        if self.drawing_start and not self.adjusting_start and self.start_pos and self.end_pos and self.image_view.cursor().shape() == 24:
 
             top_left_x = min(self.start_pos.x(), self.end_pos.x())
             box_width = abs(self.end_pos.x() - self.start_pos.x())
             top_left_y = min(self.start_pos.y(), self.end_pos.y())
             box_height = abs(self.end_pos.y() - self.start_pos.y())
 
+            self.temp_rect_item.setRect(top_left_x, top_left_y, box_width, box_height)
+
             # Update the temporary rectangle item's position and size
+        elif self.adjusting_start and not self.translate_start and not self.dragging_start:
+            top_left_x = min(self.start_pos.x(), self.end_pos.x())
+            box_width = abs(self.end_pos.x() - self.start_pos.x())
+            top_left_y = min(self.start_pos.y(), self.end_pos.y())
+            box_height = abs(self.end_pos.y() - self.start_pos.y())
+
+            # self.temp_rect_item = QGraphicsRectItem()
+            # self.temp_rect_item.setPen(QPen(QColor("yellow"), 2, Qt.SolidLine))
+            # self.scene.addItem(self.temp_rect_item)
+
             self.temp_rect_item.setRect(top_left_x, top_left_y, box_width, box_height)
 
         elif self.translate_start and self.start_pos and self.end_pos and self.image_view.cursor().shape() == 24:
