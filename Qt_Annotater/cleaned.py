@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (
     QColorDialog,
     QSizePolicy
 )
-from PyQt5.QtGui import QPixmap, QPen, QColor, QFont, QCursor, QKeySequence, QPainter
+from PyQt5.QtGui import QPixmap, QPen, QColor, QFont, QCursor, QKeySequence, QPainter, QBrush
 from PyQt5.QtCore import Qt, QRectF, QPointF
 import random
 
@@ -29,12 +29,19 @@ class Annotator(QMainWindow):
     def __init__(self):
         super().__init__()
         # Initialize variables
+
         self.available_colors = ['cyan', 'red', 'green', 'pink', 'yellow', 'blue', 'gray', 'purple', 'brown', 'black',
                                  'white']
         self.drawing_start = False
         self.dragging_start = False
+        self.adjusting_start = False
+        self.translate_start = False
         self.start_pos = None
         self.end_pos = None
+        self.left = False
+        self.right = False
+        self.up = False
+        self.down = False
 
         self.scene = QGraphicsScene(self)
         self.image_view = QGraphicsView(self.scene)
@@ -54,10 +61,11 @@ class Annotator(QMainWindow):
         self.image_files = []
         self.label_files = []
         self.label_classes = []
-        self.selected_class = 1
+        self.selected_class = 0
         self.label_colors = {}
         self.bounding_boxes = []
         self.orginal_bounding_box = []
+        self.deleted_box = []
         self.box_width = 0
         self.box_height = 0
         self.image_width = 100
@@ -67,6 +75,7 @@ class Annotator(QMainWindow):
         # Create a shortcut for copy and paste action
         self.copy_and_paste_shortcut = QShortcut(QKeySequence("V"), self)
         self.copy_and_paste_shortcut.activated.connect(self.copyAndPasteBoundingBoxes)
+
 
 
 
@@ -159,20 +168,223 @@ class Annotator(QMainWindow):
             else:
                 previous_index = 0
             self.showImage(previous_index)
+        elif key == Qt.Key_Backspace:
+            global_cursor_pos = QCursor.pos()
+            local_cursor_pos = self.image_view.mapFromGlobal(global_cursor_pos)
+            image_pos = self.image_view.mapToScene(local_cursor_pos)
+            # Iterate through bounding boxes to find the one clicked on
+            sel_box = None
+            sel_box_index = None
+            for index, box in enumerate(self.bounding_boxes):
+                box_rect = self.calculateAbsoluteBoundingBox(box)
+                if box_rect.contains(image_pos):
+                    self.box_width = box["width"] * self.image_view.sceneRect().width() / 2
+                    self.box_height = box["height"] * self.image_view.sceneRect().height() / 2
+                    # Right-clicked on this bounding box, perform edit operations here
+                    print(f"Deleting bounding box {index} in progress")
+                    sel_box = box
+                    sel_box_index = index
+                    break
+
+            if sel_box is not None and sel_box_index is not None:
+
+                del self.bounding_boxes[sel_box_index]
+                label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+                with open(label_path, "w") as label_file:
+                    for box in self.bounding_boxes:
+                        class_id = self.label_classes.index(box["label"])
+                        center_x = box["center_x"]
+                        center_y = box["center_y"]
+                        width = box["width"]
+                        height = box["height"]
+                        label_file.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+                self.showImage(self.current_index)
+
+        elif key == Qt.Key_C:
+            self.deleted_box = self.bounding_boxes
+            self.bounding_boxes = []
+            label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+            with open(label_path, "w") as label_file:
+                for box in self.bounding_boxes:
+                    class_id = self.label_classes.index(box["label"])
+                    center_x = box["center_x"]
+                    center_y = box["center_y"]
+                    width = box["width"]
+                    height = box["height"]
+                    label_file.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+            self.showImage(self.current_index)
+
+        elif key == Qt.Key_A and self.adjusting_start == False:
+            self.adjusting_start = True
+            global_cursor_pos = QCursor.pos()
+            local_cursor_pos = self.image_view.mapFromGlobal(global_cursor_pos)
+            image_pos = self.image_view.mapToScene(local_cursor_pos)
+            # Iterate through bounding boxes to find the one clicked on
+            sel_box = None
+            sel_box_index = None
+            for index, box in enumerate(self.bounding_boxes):
+                box_rect = self.calculateAbsoluteBoundingBox(box)
+                if box_rect.contains(image_pos):
+                    self.box_width = box["width"] * self.image_view.sceneRect().width() / 2
+                    self.box_height = box["height"] * self.image_view.sceneRect().height() / 2
+                    # Right-clicked on this bounding box, perform edit operations here
+                    print(f"Adhusting {index} in progress")
+                    sel_box = box
+                    sel_box_index = index
+                    break
+            self.squares = []
+
+
+            if sel_box is not None and sel_box_index is not None:
+                self.orginal_bounding_box = self.calculateAbsoluteBoundingBox(sel_box)
+                self.selected_class = sel_box["label"]
+                self.deleted_box = self.bounding_boxes[sel_box_index]
+                del self.bounding_boxes[sel_box_index]
+                label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+                with open(label_path, "w") as label_file:
+                    for box in self.bounding_boxes:
+                        class_id = self.label_classes.index(box["label"])
+                        center_x = box["center_x"]
+                        center_y = box["center_y"]
+                        width = box["width"]
+                        height = box["height"]
+                        label_file.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+
+                square_size = 15  # Size of the small squares
+                for i in range(8):
+                    if i == 0:
+                        square = QGraphicsRectItem(self.top_left_x, self.top_left_y, square_size,
+                                                   square_size)
+                        self.squares.append(square)
+                    elif i == 1:
+                        square = QGraphicsRectItem(self.top_left_x + self.box_width / 2 - square_size / 2, self.top_left_y,
+                                                   square_size, square_size)
+                        self.squares.append(square)
+                    elif i == 2:
+                        square = QGraphicsRectItem(self.top_left_x + self.box_width - square_size, self.top_left_y, square_size,
+                                                   square_size)
+                        self.squares.append(square)
+                    elif i == 3:
+                        square = QGraphicsRectItem(self.top_left_x, self.top_left_y + self.box_height / 2 - square_size / 2,
+                                                   square_size, square_size)
+                        self.squares.append(square)
+                    elif i == 4:
+                        square = QGraphicsRectItem(self.top_left_x + self.box_width - square_size, self.top_left_y + self.box_height / 2 - square_size / 2,
+                                                   square_size, square_size)
+                        self.squares.append(square)
+                    elif i == 5:
+                        square = QGraphicsRectItem(self.top_left_x, self.top_left_y + self.box_height - square_size, square_size,
+                                                   square_size)
+                        self.squares.append(square)
+                    elif i == 6:
+                        square = QGraphicsRectItem(self.top_left_x + self.box_width / 2 - square_size / 2, self.top_left_y + self.box_height - square_size,
+                                                   square_size, square_size)
+                        self.squares.append(square)
+                    else:
+                        square = QGraphicsRectItem(self.top_left_x + self.box_width - square_size, self.top_left_y + self.box_height - square_size, square_size,
+                                                   square_size)
+                        self.squares.append(square)
+                    color = QColor(self.label_colors[self.selected_class])
+                    square.setPen(QPen(color, 2))
+                    square.setBrush(QBrush(color))
+                    self.scene.addItem(square)
+                self.selected_class = self.label_classes.index(self.selected_class)
+            else:
+                self.adjusting_start = False
+
+
+                # base on this add 8 small squares on the bounding box, at each corner and at the middle of each side
+                # upon click, detect if cursor clicked on these squares, if on side square, change cursor to left right/ up down arrows allow translational adjust of that side when dragging mouse
+                # if click on squares at corners, fix starting point at the opposite corner, change curesor to diagnal arrows, make the end point the clicked squares' corner from the original box
+
+
+
         elif Qt.Key_0 <= key <= Qt.Key_9:
-            self.selected_class = int(key - Qt.Key_0)
+            self.selected_class = int(key - Qt.Key_0) - 1
 
     def mousePressEventHandler(self, event):
-        if event.button() == Qt.LeftButton and self.image_view.cursor().shape() == 24:
+        if event.button() == Qt.LeftButton and self.image_view.cursor().shape() == 24 and self.adjusting_start:
+            clicked_point = self.image_view.mapToScene(event.pos())
+            self.temp_rect_item = QGraphicsRectItem()
+            self.temp_rect_item.setPen(QPen(QColor("yellow"), 2, Qt.SolidLine))
+            self.scene.addItem(self.temp_rect_item)
+
+            # box_rect = self.calculateAbsoluteBoundingBox(box)
+            if self.squares[0].contains(clicked_point):
+                print("top left slected")
+                self.start_pos = QPointF(self.bottom_right_x, self.bottom_right_y)
+                self.end_pos = QPointF(self.top_left_x, self.top_left_y)
+
+            elif self.squares[2].contains(clicked_point):
+                print("top right slected")
+                self.start_pos = QPointF(self.top_left_x, self.bottom_right_y)
+                self.end_pos = QPointF(self.bottom_right_x, self.top_left_y)
+                # self.start_pos = self.bottom_right
+            elif self.squares[5].contains(clicked_point):
+                print("bot left slected")
+                self.start_pos = QPointF(self.bottom_right_x, self.top_left_y)
+                self.end_pos = QPointF(self.top_left_x, self.bottom_right_y)
+                # self.start_pos = self.bottom_left
+            elif self.squares[7].contains(clicked_point):
+                print("bot right slected")
+                self.start_pos = QPointF(self.top_left_x, self.top_left_y)
+                self.end_pos = QPointF(self.bottom_right_x, self.bottom_right_y)
+                # self.start_pos = self.top_right
+            elif self.squares[1].contains(clicked_point):
+                print("up slected")
+                self.translate_start = True
+                self.up = True
+                self.start_pos = QPointF(self.bottom_right_x, self.bottom_right_y)
+                self.end_pos = QPointF(self.top_left_x, self.top_left_y)
+
+
+            elif self.squares[3].contains(clicked_point):
+                print("left slected")
+                self.translate_start = True
+                self.left = True
+                self.start_pos = QPointF(self.bottom_right_x, self.bottom_right_y)
+                self.end_pos = QPointF(self.top_left_x, self.top_left_y)
+
+            elif self.squares[4].contains(clicked_point):
+                self.translate_start = True
+                self.right = True
+                print("right slected")
+                self.start_pos = QPointF(self.top_left_x, self.top_left_y)
+                self.end_pos = QPointF(self.bottom_right_x, self.bottom_right_y)
+            elif self.squares[6].contains(clicked_point):
+                self.translate_start = True
+                self.down = True
+                print("down slected")
+                self.start_pos = QPointF(self.top_left_x, self.top_left_y)
+                self.end_pos = QPointF(self.bottom_right_x, self.bottom_right_y)
+            else:
+                self.adjusting_start = False
+                self.selected_class = 0
+                self.scene.clear()
+                self.bounding_boxes.append(self.deleted_box)
+                label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+                with open(label_path, "w") as label_file:
+                    for box in self.bounding_boxes:
+                        class_id = self.label_classes.index(box["label"])
+                        center_x = box["center_x"]
+                        center_y = box["center_y"]
+                        width = box["width"]
+                        height = box["height"]
+                        label_file.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+                self.showImage(self.current_index)
+
+
+        elif event.button() == Qt.LeftButton and self.image_view.cursor().shape() == 24 and not self.adjusting_start:
             # Start drawing the bounding box
             self.temp_rect_item = QGraphicsRectItem()
             self.temp_rect_item.setPen(QPen(QColor("cyan"), 2, Qt.SolidLine))
             self.scene.addItem(self.temp_rect_item)
             self.drawing_start = True
             self.start_pos = self.end_pos = self.image_view.mapToScene(event.pos())
-        elif event.button() == Qt.RightButton and self.image_view.cursor().shape() == 24:
+        elif event.button() == Qt.RightButton and self.image_view.cursor().shape() == 24 and not self.adjusting_start and not self.translate_start:
             # Check if the right mouse button is clicked
             clicked_point = self.image_view.mapToScene(event.pos())
+            print(clicked_point)
             # Iterate through bounding boxes to find the one clicked on
             sel_box = None
             sel_box_index = None
@@ -194,6 +406,7 @@ class Annotator(QMainWindow):
                 self.dragging_start = True
                 self.orginal_bounding_box = self.calculateAbsoluteBoundingBox(sel_box)
                 self.selected_class = sel_box["label"]
+                self.deleted_box =self.bounding_boxes[sel_box_index]
                 del self.bounding_boxes[sel_box_index]
                 self.start_pos = self.image_view.mapToScene(event.pos())
                 label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
@@ -206,10 +419,6 @@ class Annotator(QMainWindow):
                         height = box["height"]
                         label_file.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
 
-
-
-            # return QRectF(top_left_x, top_left_y, bottom_right_x - top_left_x, bottom_right_y - top_left_y)
-
     def calculateAbsoluteBoundingBox(self, box):
         image_width = self.image_view.sceneRect().width()
         image_height = self.image_view.sceneRect().height()
@@ -219,12 +428,35 @@ class Annotator(QMainWindow):
         self.top_left_y = box["center_y"] * image_height - box["height"] * image_height / 2
         self.bottom_right_x = self.top_left_x + box["width"] * image_width
         self.bottom_right_y = self.top_left_y + box["height"] * image_height
+        self.box_width = self.bottom_right_x - self.top_left_x
+        self.box_height = self.bottom_right_y - self.top_left_y
 
         # Create a QRectF representing the absolute bounding box
         return QRectF(self.top_left_x, self.top_left_y, self.bottom_right_x - self.top_left_x, self.bottom_right_y - self.top_left_y)
 
     def mouseMoveEventHandler(self, event):
-        if self.drawing_start and self.image_view.cursor().shape() == 24:
+        if self.adjusting_start and not self.translate_start and not event.button() == Qt.RightButton  :
+            new_end_pos = self.image_view.mapToScene(event.pos())
+
+            # Ensure the new_end_pos stays within the image boundaries
+            new_end_pos.setX(max(self.image_rect.left() + 1, min(self.image_rect.right() - 1, new_end_pos.x())))
+            new_end_pos.setY(max(self.image_rect.top() + 1, min(self.image_rect.bottom() - 1, new_end_pos.y())))
+
+            self.end_pos = new_end_pos
+            self.updateTemporaryBoundingBox()
+
+        elif self.translate_start:
+            end_pos = self.image_view.mapToScene(event.pos())
+            end_pos.setX(max(self.image_rect.left() + 1,
+                             min(self.image_rect.right() - 1,
+                                 end_pos.x())))
+            end_pos.setY(max(self.image_rect.top() + 1,
+                             min(self.image_rect.bottom() - 1,
+                                 end_pos.y())))
+            self.end_pos = end_pos
+            self.updateTemporaryBoundingBox()
+
+        elif self.drawing_start and self.image_view.cursor().shape() == 24:
             # Update the end position as the mouse moves
             new_end_pos = self.image_view.mapToScene(event.pos())
 
@@ -245,66 +477,158 @@ class Annotator(QMainWindow):
             self.updateTemporaryBoundingBox()
 
     def mouseReleaseEventHandler(self, event):
+
+
         if self.drawing_start and event.button() == Qt.LeftButton:
             # End drawing the bounding box
             self.drawing_start = False
 
-            # Calculate bounding box coordinates (in relative values)
-            top_left_x = min(self.start_pos.x(), self.end_pos.x())
-            top_left_y = min(self.start_pos.y(), self.end_pos.y())
-            box_width = abs(self.end_pos.x() - self.start_pos.x())
-            box_height = abs(self.end_pos.y() - self.start_pos.y())
+            if self.start_pos != self.end_pos:
 
-            # Ensure the bounding box coordinates stay within the image boundaries
-            image_rect = self.image_view.sceneRect()
-            top_left_x = max(image_rect.left(), min(image_rect.right(), top_left_x))
-            top_left_y = max(image_rect.top(), min(image_rect.bottom(), top_left_y))
-            box_width = min(image_rect.right() - top_left_x, box_width)
-            box_height = min(image_rect.bottom() - top_left_y, box_height)
-            # print(top_left_x,top_left_y,box_width,box_height)
+                # Calculate bounding box coordinates (in relative values)
+                top_left_x = min(self.start_pos.x(), self.end_pos.x())
+                top_left_y = min(self.start_pos.y(), self.end_pos.y())
+                box_width = abs(self.end_pos.x() - self.start_pos.x())
+                box_height = abs(self.end_pos.y() - self.start_pos.y())
+
+                # Ensure the bounding box coordinates stay within the image boundaries
+                image_rect = self.image_view.sceneRect()
+                top_left_x = max(image_rect.left(), min(image_rect.right(), top_left_x))
+                top_left_y = max(image_rect.top(), min(image_rect.bottom(), top_left_y))
+                box_width = min(image_rect.right() - top_left_x, box_width)
+                box_height = min(image_rect.bottom() - top_left_y, box_height)
+                # print(top_left_x,top_left_y,box_width,box_height)
 
 
-            class_name = self.label_classes[self.selected_class - 1]
-            center_x = (top_left_x + box_width / 2) / self.image_view.sceneRect().width()
-            center_y = (top_left_y + box_height / 2) / self.image_view.sceneRect().height()
-            width = box_width / self.image_view.sceneRect().width()
-            height = box_height / self.image_view.sceneRect().height()
-            print(f"{self.selected_class - 1} {class_name} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+                class_name = self.label_classes[self.selected_class]
+                center_x = (top_left_x + box_width / 2) / self.image_view.sceneRect().width()
+                center_y = (top_left_y + box_height / 2) / self.image_view.sceneRect().height()
+                width = box_width / self.image_view.sceneRect().width()
+                height = box_height / self.image_view.sceneRect().height()
+                print(f"{self.selected_class} {class_name} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
 
-            # Save the bounding box coordinates to the current label file
-            label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
-            with open(label_path, "a") as label_file:
-                label_file.write(f"{self.selected_class - 1} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+                # Save the bounding box coordinates to the current label file
+                label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+                with open(label_path, "a") as label_file:
+                    label_file.write(f"{self.selected_class} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
 
-            self.showImage(self.current_index)
+                self.showImage(self.current_index)
+
+
+        elif  self.adjusting_start and event.button() == Qt.LeftButton and not self.translate_start:
+            self.adjusting_start = False
+
+            if self.start_pos != self.end_pos:
+                # Calculate bounding box coordinates (in relative values)
+                top_left_x = min(self.start_pos.x(), self.end_pos.x())
+                top_left_y = min(self.start_pos.y(), self.end_pos.y())
+                box_width = abs(self.end_pos.x() - self.start_pos.x())
+                box_height = abs(self.end_pos.y() - self.start_pos.y())
+
+                # Ensure the bounding box coordinates stay within the image boundaries
+                image_rect = self.image_view.sceneRect()
+                top_left_x = max(image_rect.left(), min(image_rect.right(), top_left_x))
+                top_left_y = max(image_rect.top(), min(image_rect.bottom(), top_left_y))
+                box_width = min(image_rect.right() - top_left_x, box_width)
+                box_height = min(image_rect.bottom() - top_left_y, box_height)
+                # print(top_left_x,top_left_y,box_width,box_height)
+
+                class_name = self.label_classes[self.selected_class]
+                center_x = (top_left_x + box_width / 2) / self.image_view.sceneRect().width()
+                center_y = (top_left_y + box_height / 2) / self.image_view.sceneRect().height()
+                width = box_width / self.image_view.sceneRect().width()
+                height = box_height / self.image_view.sceneRect().height()
+                print(f"{self.selected_class} {class_name} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+
+                # Save the bounding box coordinates to the current label file
+                label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+                with open(label_path, "a") as label_file:
+                    label_file.write(f"{self.selected_class} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+
+                self.showImage(self.current_index)
+
+        elif self.translate_start and event.button() == Qt.LeftButton:
+            self.translate_start = False
+            self.adjusting_start = False
+
+            if self.start_pos != self.end_pos:
+
+                if self.left == True:
+                    top_left_x = min(self.end_pos.x(), self.start_pos.x())
+                    box_width = abs(self.start_pos.x() - self.end_pos.x())
+                    top_left_y = self.top_left_y
+                    box_height = self.bottom_right_y - self.top_left_y
+                elif self.right == True:
+                    top_left_x = min(self.end_pos.x(), self.start_pos.x())
+                    box_width = abs(self.start_pos.x() - self.end_pos.x())
+                    top_left_y = self.top_left_y
+                    box_height = self.bottom_right_y - self.top_left_y
+                elif self.down == True:
+                    top_left_x = self.top_left_x
+                    box_width = self.bottom_right_x - self.top_left_x
+                    top_left_y = min(self.end_pos.y(), self.start_pos.y())
+                    box_height = abs(self.start_pos.y() - self.end_pos.y())
+                elif self.up == True:
+                    top_left_x = self.top_left_x
+                    box_width = self.bottom_right_x - self.top_left_x
+                    top_left_y = min(self.end_pos.y(), self.start_pos.y())
+                    box_height = abs(self.start_pos.y() - self.end_pos.y())
+
+                self.left = False
+                self.right = False
+                self.up = False
+                self.down = False
+
+
+                class_name = self.label_classes[self.selected_class]
+                center_x = (top_left_x + box_width / 2) / self.image_view.sceneRect().width()
+                center_y = (top_left_y + box_height / 2) / self.image_view.sceneRect().height()
+                width = box_width / self.image_view.sceneRect().width()
+                height = box_height / self.image_view.sceneRect().height()
+                print(f"{self.selected_class} {class_name} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+
+                # Save the bounding box coordinates to the current label file
+                label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+                with open(label_path, "a") as label_file:
+                    label_file.write(f"{self.selected_class} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+
+                # Reload the current image and its bounding boxes
+                self.showImage(self.current_index)
+
+
+
 
         elif self.dragging_start and event.button() == Qt.RightButton:
             # End dragging the bounding box
             self.dragging_start = False
 
-            top_left_x = self.top_left_x + (self.end_pos.x() - self.start_pos.x())
-            box_width = self.bottom_right_x - self.top_left_x
-            top_left_y = self.top_left_y + (self.end_pos.y() - self.start_pos.y())
-            box_height = self.bottom_right_y - self.top_left_y
+            if self.start_pos != self.end_pos:
 
-            class_name = self.label_classes[self.label_classes.index(self.selected_class)]
-            self.selected_class = self.label_classes.index(self.selected_class)
-            center_x = (top_left_x + box_width / 2) / self.image_view.sceneRect().width()
-            center_y = (top_left_y + box_height / 2) / self.image_view.sceneRect().height()
-            width = box_width / self.image_view.sceneRect().width()
-            height = box_height / self.image_view.sceneRect().height()
-            print(f"{self.selected_class} {class_name} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+                top_left_x = self.top_left_x + (self.end_pos.x() - self.start_pos.x())
+                box_width = self.bottom_right_x - self.top_left_x
+                top_left_y = self.top_left_y + (self.end_pos.y() - self.start_pos.y())
+                box_height = self.bottom_right_y - self.top_left_y
 
-            # Save the bounding box coordinates to the current label file
-            label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
-            with open(label_path, "a") as label_file:
-                label_file.write(f"{self.selected_class} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+                class_name = self.label_classes[self.label_classes.index(self.selected_class)]
+                self.selected_class = self.label_classes.index(self.selected_class)
+                center_x = (top_left_x + box_width / 2) / self.image_view.sceneRect().width()
+                center_y = (top_left_y + box_height / 2) / self.image_view.sceneRect().height()
+                width = box_width / self.image_view.sceneRect().width()
+                height = box_height / self.image_view.sceneRect().height()
+                print(f"{self.selected_class} {class_name} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
 
-            # Reload the current image and its bounding boxes
-            self.showImage(self.current_index)
+                # Save the bounding box coordinates to the current label file
+                label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+                with open(label_path, "a") as label_file:
+                    label_file.write(f"{self.selected_class} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+
+                # Reload the current image and its bounding boxes
+                self.showImage(self.current_index)
+
+
 
     def updateTemporaryBoundingBox(self):
-        if self.drawing_start and self.start_pos and self.end_pos and self.image_view.cursor().shape() == 24:
+        if (self.drawing_start or (self.adjusting_start and not self.translate_start)) and self.start_pos and self.end_pos and self.image_view.cursor().shape() == 24:
 
             top_left_x = min(self.start_pos.x(), self.end_pos.x())
             box_width = abs(self.end_pos.x() - self.start_pos.x())
@@ -313,6 +637,33 @@ class Annotator(QMainWindow):
 
             # Update the temporary rectangle item's position and size
             self.temp_rect_item.setRect(top_left_x, top_left_y, box_width, box_height)
+
+        elif self.translate_start and self.start_pos and self.end_pos and self.image_view.cursor().shape() == 24:
+
+            if self.left == True:
+                top_left_x = min(self.end_pos.x(), self.start_pos.x())
+                box_width = abs(self.start_pos.x() - self.end_pos.x())
+                top_left_y = self.top_left_y
+                box_height = self.bottom_right_y - self.top_left_y
+            elif self.right == True:
+                top_left_x = min(self.end_pos.x(), self.start_pos.x())
+                box_width = abs(self.start_pos.x() - self.end_pos.x())
+                top_left_y = self.top_left_y
+                box_height = self.bottom_right_y - self.top_left_y
+            elif self.down == True:
+                top_left_x = self.top_left_x
+                box_width = self.bottom_right_x - self.top_left_x
+                top_left_y = min(self.end_pos.y(), self.start_pos.y())
+                box_height = abs(self.start_pos.y() - self.end_pos.y())
+            elif self.up == True:
+                top_left_x = self.top_left_x
+                box_width = self.bottom_right_x - self.top_left_x
+                top_left_y = min(self.end_pos.y(), self.start_pos.y())
+                box_height = abs(self.start_pos.y() - self.end_pos.y())
+
+            # Update the temporary rectangle item's position and size
+            self.temp_rect_item.setRect(top_left_x, top_left_y, box_width, box_height)
+
         elif self.dragging_start and self.start_pos and self.end_pos and self.image_view.cursor().shape() == 24:
             top_left_x = self.top_left_x + (self.end_pos.x() - self.start_pos.x())
             box_width = self.bottom_right_x - self.top_left_x
@@ -471,6 +822,8 @@ class Annotator(QMainWindow):
             text_item.setBrush(color)
             text_item.setFont(QFont("Arial", font_size))
             self.scene.addItem(text_item)
+
+
 
         self.image_view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
         self.image_view.setScene(self.scene)
