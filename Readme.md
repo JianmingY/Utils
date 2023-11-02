@@ -23,3 +23,8 @@ Colors: (besides the box colors)
 1. cyan - you are drawing a new box
 2. red - you are dragging a box
 3. yellow - you are adjusting a box
+
+To Do:  1. When the text is outside the image, it auto fits to the view - shrinking image & deforming boxes ------------- sol: print where it's in the image
+        2. Make the class panel clickagble to account for # of classes greater than 10
+        3. Add go back function
+        4. Clean up code to make it look nicer
