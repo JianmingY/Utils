@@ -711,16 +711,32 @@ class Annotator(QMainWindow):
     def copyAndPasteBoundingBoxes(self):
         if self.current_index > 0:
             previous_label_path = os.path.join(self.label_folder, self.label_files[self.current_index - 1])
+            TEN_BEFORE_label_path = os.path.join(self.label_folder, self.label_files[self.current_index - 10])
             current_label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
 
             # Copy and paste bounding boxes from the previous image to the current image's label file
             if os.path.exists(previous_label_path):
                 with open(previous_label_path, "r") as prev_file:
                     previous_bounding_boxes = prev_file.readlines()
+                    print(previous_bounding_boxes)
+                    print(previous_bounding_boxes == [])
 
-                with open(current_label_path, "w") as current_file:
-                    # Copy previous bounding boxes to the current image's label file
-                    current_file.writelines(previous_bounding_boxes)
+                if previous_bounding_boxes != []:
+
+                    with open(current_label_path, "w") as current_file:
+                        # Copy previous bounding boxes to the current image's label file
+                        current_file.writelines(previous_bounding_boxes)
+
+                elif os.path.exists(TEN_BEFORE_label_path):
+                    with open(TEN_BEFORE_label_path, "r") as TEN_prev_file:
+                        bounding_boxes = TEN_prev_file.readlines()
+                        print(bounding_boxes)
+
+                    if bounding_boxes != []:
+
+                        with open(current_label_path, "w") as current_file:
+                            # Copy previous bounding boxes to the current image's label file
+                            current_file.writelines(bounding_boxes)
 
                 # Reload the current image and its bounding boxes
                 self.showImage(self.current_index)
