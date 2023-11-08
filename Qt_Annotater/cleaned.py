@@ -30,7 +30,7 @@ class Annotator(QMainWindow):
         super().__init__()
         # Initialize variables
 
-        self.available_colors = ['cyan', 'red', 'green', 'pink', 'yellow', 'blue', 'gray', 'purple', 'brown', 'black',
+        self.available_colors = ['cyan', 'red', 'green', 'pink', 'yellow', 'blue', 'pink', 'purple', 'brown', 'black',
                                  'white']
         self.drawing_start = False
         self.dragging_start = False
@@ -161,6 +161,21 @@ class Annotator(QMainWindow):
             # Move to the next image
             next_index = (self.current_index + 1) % len(self.image_files)
             self.showImage(next_index)
+        elif key == Qt.Key_F:
+            # Save the bounding box coordinates to the current label file
+            label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
+            with open(label_path, "w") as label_file:
+                for box in self.bounding_boxes:
+                    class_id = self.label_classes.index(box["label"])
+                    center_x = box["center_x"]
+                    center_y = box["center_y"]
+                    width = box["width"]
+                    height = box["height"]
+                    label_file.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+
+            # Move to the next image
+            next_ten_index = (self.current_index + 10) % len(self.image_files)
+            self.showImage(next_ten_index)
         elif key == Qt.Key_S:
             # Move to the previous image
             if self.current_index >= 1:
@@ -299,8 +314,20 @@ class Annotator(QMainWindow):
 
 
 
-        elif Qt.Key_0 <= key <= Qt.Key_9:
+        elif Qt.Key_0 < key <= Qt.Key_9:
             self.selected_class = int(key - Qt.Key_0) - 1
+        elif key == Qt.Key_0:
+            self.selected_class = 9
+        elif key == Qt.Key_F1:
+            self.selected_class = 10
+        elif key == Qt.Key_F2:
+            self.selected_class = 11
+        elif key == Qt.Key_F3:
+            self.selected_class = 12
+        elif key == Qt.Key_F4:
+            self.selected_class = 13
+        elif key == Qt.Key_F5:
+            self.selected_class = 14
 
     def mousePressEventHandler(self, event):
         if (self.translate_start or self.adjusting_start) and event.button() == Qt.RightButton:
@@ -711,19 +738,44 @@ class Annotator(QMainWindow):
     def copyAndPasteBoundingBoxes(self):
         if self.current_index > 0:
             previous_label_path = os.path.join(self.label_folder, self.label_files[self.current_index - 1])
+            TEN_BEFORE_label_path = os.path.join(self.label_folder, self.label_files[self.current_index - 10])
             current_label_path = os.path.join(self.label_folder, self.label_files[self.current_index])
 
             # Copy and paste bounding boxes from the previous image to the current image's label file
             if os.path.exists(previous_label_path):
                 with open(previous_label_path, "r") as prev_file:
                     previous_bounding_boxes = prev_file.readlines()
+                    print(previous_bounding_boxes)
+                    print(previous_bounding_boxes == [])
 
-                with open(current_label_path, "w") as current_file:
-                    # Copy previous bounding boxes to the current image's label file
-                    current_file.writelines(previous_bounding_boxes)
+                if previous_bounding_boxes != []:
 
-                # Reload the current image and its bounding boxes
-                self.showImage(self.current_index)
+                    with open(current_label_path, "w") as current_file:
+                        # Copy previous bounding boxes to the current image's label file
+                        current_file.writelines(previous_bounding_boxes)
+                elif os.path.exists(TEN_BEFORE_label_path):
+                    with open(TEN_BEFORE_label_path, "r") as TEN_prev_file:
+                        bounding_boxes = TEN_prev_file.readlines()
+                        print(bounding_boxes)
+
+                    if bounding_boxes != []:
+                        with open(current_label_path, "w") as current_file:
+                            # Copy previous bounding boxes to the current image's label file
+                            current_file.writelines(bounding_boxes)
+
+            elif os.path.exists(TEN_BEFORE_label_path):
+                with open(TEN_BEFORE_label_path, "r") as TEN_prev_file:
+                    bounding_boxes = TEN_prev_file.readlines()
+                    print(bounding_boxes)
+
+                if bounding_boxes != []:
+
+                    with open(current_label_path, "w") as current_file:
+                        # Copy previous bounding boxes to the current image's label file
+                        current_file.writelines(bounding_boxes)
+
+            # Reload the current image and its bounding boxes
+            self.showImage(self.current_index)
 
     def loadLabelClasses(self):
         options = QFileDialog.Options()
