@@ -8,16 +8,17 @@ Preparation:
 2. Prepare images that needs to be label in a folder, load secondly
 
 Key uses:
-0. Default first class (Key_1), number key to change class
+0. Default first class (Key_1), number key to change class, 0 is the 10th class, F1 for 11th, and so on
 1. Left Click and drag to draw box
 2. Right click and drag to move box
-3. Key_V to copy previous image's label to the current one
+3. Key_V to copy previous image's label to the current one, if the previous one does not have label file/ label file is empty then copy from 10 images ago
 4. Key_C to clear all boxes on current image
 5. Key_Backspace to delete the box where the cursor is pointing
 6. Key_A to start adjusting the box where the cursor is pointing:
    - left click on the squares to modify the box
 8. Key_D go to the next image
 9. Key_S go to the previsous one
+10. Key_F go to the 10 images later
 
 Colors: (besides the box colors)
 1. cyan - you are drawing a new box
