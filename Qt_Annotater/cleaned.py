@@ -268,35 +268,35 @@ class Annotator(QMainWindow):
                 square_size = 15  # Size of the small squares
                 for i in range(8):
                     if i == 0:
-                        square = QGraphicsRectItem(self.top_left_x, self.top_left_y, square_size,
+                        square = QGraphicsRectItem(self.top_left_x - 1 , self.top_left_y - 1, square_size,
                                                    square_size)
                         self.squares.append(square)
                     elif i == 1:
-                        square = QGraphicsRectItem(self.top_left_x + self.box_width / 2 - square_size / 2, self.top_left_y,
+                        square = QGraphicsRectItem(self.top_left_x - 1 + self.box_width / 2 - square_size / 2, self.top_left_y - 1 ,
                                                    square_size, square_size)
                         self.squares.append(square)
                     elif i == 2:
-                        square = QGraphicsRectItem(self.top_left_x + self.box_width - square_size, self.top_left_y, square_size,
+                        square = QGraphicsRectItem(self.top_left_x - 1 + self.box_width - square_size, self.top_left_y - 1, square_size,
                                                    square_size)
                         self.squares.append(square)
                     elif i == 3:
-                        square = QGraphicsRectItem(self.top_left_x, self.top_left_y + self.box_height / 2 - square_size / 2,
+                        square = QGraphicsRectItem(self.top_left_x - 1, self.top_left_y - 1 + self.box_height / 2 - square_size / 2,
                                                    square_size, square_size)
                         self.squares.append(square)
                     elif i == 4:
-                        square = QGraphicsRectItem(self.top_left_x + self.box_width - square_size, self.top_left_y + self.box_height / 2 - square_size / 2,
+                        square = QGraphicsRectItem(self.top_left_x - 1 + self.box_width - square_size, self.top_left_y - 1 + self.box_height / 2 - square_size / 2,
                                                    square_size, square_size)
                         self.squares.append(square)
                     elif i == 5:
-                        square = QGraphicsRectItem(self.top_left_x, self.top_left_y + self.box_height - square_size, square_size,
+                        square = QGraphicsRectItem(self.top_left_x - 1, self.top_left_y - 1+ self.box_height - square_size, square_size,
                                                    square_size)
                         self.squares.append(square)
                     elif i == 6:
-                        square = QGraphicsRectItem(self.top_left_x + self.box_width / 2 - square_size / 2, self.top_left_y + self.box_height - square_size,
+                        square = QGraphicsRectItem(self.top_left_x -1 + self.box_width / 2 - square_size / 2, self.top_left_y - 1+ self.box_height - square_size,
                                                    square_size, square_size)
                         self.squares.append(square)
                     else:
-                        square = QGraphicsRectItem(self.top_left_x + self.box_width - square_size, self.top_left_y + self.box_height - square_size, square_size,
+                        square = QGraphicsRectItem(self.top_left_x - 1 + self.box_width - square_size, self.top_left_y - 1 + self.box_height - square_size, square_size,
                                                    square_size)
                         self.squares.append(square)
                     color = QColor(self.label_colors[self.selected_class])
@@ -546,10 +546,10 @@ class Annotator(QMainWindow):
 
                 # Ensure the bounding box coordinates stay within the image boundaries
                 image_rect = self.image_view.sceneRect()
-                top_left_x = max(image_rect.left(), min(image_rect.right(), top_left_x))
-                top_left_y = max(image_rect.top(), min(image_rect.bottom(), top_left_y))
-                box_width = min(image_rect.right() - top_left_x, box_width)
-                box_height = min(image_rect.bottom() - top_left_y, box_height)
+                top_left_x = max(image_rect.left(), min(image_rect.right() - 1, top_left_x))
+                top_left_y = max(image_rect.top(), min(image_rect.bottom() - 1, top_left_y))
+                box_width = min(image_rect.right() - 1 - top_left_x, box_width)
+                box_height = min(image_rect.bottom() - 1 - top_left_y, box_height)
                 # print(top_left_x,top_left_y,box_width,box_height)
 
 
@@ -685,6 +685,8 @@ class Annotator(QMainWindow):
             box_width = abs(self.end_pos.x() - self.start_pos.x())
             top_left_y = min(self.start_pos.y(), self.end_pos.y())
             box_height = abs(self.end_pos.y() - self.start_pos.y())
+
+            print(top_left_x, top_left_y, box_width, box_height)
 
             self.temp_rect_item.setRect(top_left_x, top_left_y, box_width, box_height)
 
@@ -832,6 +834,8 @@ class Annotator(QMainWindow):
 
             if self.label_files:
                 # Load the first image and its corresponding label
+                self.image_view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+                self.image_view.setScene(self.scene)
                 self.showImage(self.current_index)
             else:
                 self.showNoImageLoadedMessage()
@@ -851,9 +855,12 @@ class Annotator(QMainWindow):
 
 
 
-            self.image_view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
-            self.image_width = self.image_view.sceneRect().width()
-            self.image_height = self.image_view.sceneRect().height()
+            # self.image_view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+            # self.image_width = self.image_view.sceneRect().width()
+            # self.image_height = self.image_view.sceneRect().height()
+            self.image_width = 1920
+            self.image_height = 1080
+
             self.image_view.setScene(self.scene)
             self.image_rect = self.image_view.sceneRect()
 
@@ -881,6 +888,7 @@ class Annotator(QMainWindow):
             self.status_label.setText(message)
             self.current_index = index
 
+
             self.update()  # Trigger the paintEvent to draw bounding boxes
 
     def paintEvent(self, event):
@@ -889,16 +897,26 @@ class Annotator(QMainWindow):
         for box in self.bounding_boxes:
             color = QColor(self.getColorForLabel(box["label"]))
 
+            print(self.image_width,self.image_height)
 
             box_width = box["width"] * self.image_width
             box_height = box["height"] * self.image_height
             top_left_x = (box["center_x"] * self.image_width - box_width / 2)
             top_left_y = (box["center_y"] * self.image_height - box_height / 2)
 
+            # Adjust coordinates to ensure the bounding box stays within the image
+            top_left_x = max(1, top_left_x)
+            top_left_y = max(1, top_left_y)
+            bottom_right_x = min(self.image_width-1, top_left_x + box_width - 1)
+            bottom_right_y = min(self.image_height-1, top_left_y + box_height - 1)
+
+            # Recalculate width and height after adjustment
+            box_width = bottom_right_x - top_left_x
+            box_height = bottom_right_y - top_left_y
 
             # Draw bounding box
             rect_item = QGraphicsRectItem(top_left_x, top_left_y, box_width, box_height)
-            rect_item.setPen(QPen(color, 2))
+            rect_item.setPen(QPen(color, 1))
             self.scene.addItem(rect_item)
 
 
